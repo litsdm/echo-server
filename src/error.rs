@@ -37,6 +37,9 @@ pub enum Error {
 
     #[error[transparent]]
     Deserialize(#[from] serde_json::error::Error),
+
+    #[error(transparent)]
+    Reqwest(#[from] reqwest::Error),
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -59,6 +62,7 @@ impl actix_web::error::ResponseError for Error {
             Error::Deserialize(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::BadRequest(_) => StatusCode::BAD_REQUEST,
             Error::PasswordHash(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Reqwest(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

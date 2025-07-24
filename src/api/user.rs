@@ -4,6 +4,7 @@ use actix_web::{
 };
 
 use crate::{
+    connector::backblaze::BackBlaze,
     error::{Error, Result},
     model::{
         token::Claims,
@@ -21,10 +22,9 @@ pub async fn get_user(db: Data<SurrealDB>, req: HttpRequest) -> Result<Json<User
         return Err(Error::WrongCredentials);
     }
 
-    // let backblaze = BackBlaze::new().await?;
-    let user: User = user_option.unwrap();
-
-    // user.blaze_token = Some(backblaze.authorization_token);
+    let read_token = BackBlaze::get_read_auth_token().await?;
+    let mut user: User = user_option.unwrap();
+    user.blaze_token = Some(read_token);
 
     Ok(Json(user))
 }

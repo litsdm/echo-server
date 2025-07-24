@@ -1,4 +1,5 @@
 mod api;
+mod connector;
 mod error;
 mod model;
 mod repo;
@@ -20,6 +21,8 @@ use api::{
 use dotenv::dotenv;
 use model::token::TokenManager;
 use repo::surreal::SurrealDB;
+
+use crate::api::storage::{presign_get, presign_put};
 
 async fn validator(
     req: ServiceRequest,
@@ -71,12 +74,15 @@ async fn main() -> std::io::Result<()> {
             )
             .service(scope("/auth").service(login).service(signup))
             .service(
-                scope("/api").wrap(auth).service(
-                    scope("/user")
-                        .service(get_user)
-                        .service(update_user)
-                        .service(delete_user),
-                ),
+                scope("/api")
+                    .wrap(auth)
+                    .service(
+                        scope("/user")
+                            .service(get_user)
+                            .service(update_user)
+                            .service(delete_user),
+                    )
+                    .service(scope("/storage").service(presign_put).service(presign_get)),
             )
     })
     .bind(("0.0.0.0", 8080))?

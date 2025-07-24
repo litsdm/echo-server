@@ -18,11 +18,10 @@ pub struct User {
     pub updated_at: String,
     pub email: Option<String>,
     pub password_hash: Option<String>,
-    #[serde(alias = "avatarSeed")]
     pub avatar_seed: String,
     pub name: Option<String>,
-    #[serde(alias = "verifiedEmail")]
     pub verified_email: Option<bool>,
+    pub blaze_token: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
