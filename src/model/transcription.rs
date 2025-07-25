@@ -41,7 +41,7 @@ pub struct Transcription {
     pub audio_file: Option<String>, // B2 url
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct NewTranscription {
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -22,7 +22,10 @@ use dotenv::dotenv;
 use model::token::TokenManager;
 use repo::surreal::SurrealDB;
 
-use crate::api::storage::{presign_get, presign_put};
+use crate::api::{
+    storage::{presign_get, presign_put},
+    transcription::transcribe_raw_only,
+};
 
 async fn validator(
     req: ServiceRequest,
@@ -82,7 +85,8 @@ async fn main() -> std::io::Result<()> {
                             .service(update_user)
                             .service(delete_user),
                     )
-                    .service(scope("/storage").service(presign_put).service(presign_get)),
+                    .service(scope("/storage").service(presign_put).service(presign_get))
+                    .service(scope("/transcription").service(transcribe_raw_only)),
             )
     })
     .bind(("0.0.0.0", 8080))?
