@@ -23,6 +23,7 @@ use model::token::TokenManager;
 use repo::surreal::SurrealDB;
 
 use crate::api::{
+    auth::{check_email_exists, guest},
     storage::{presign_get, presign_put},
     transcription::transcribe_raw_only,
 };
@@ -75,7 +76,13 @@ async fn main() -> std::io::Result<()> {
                     ])
                     .max_age(3600),
             )
-            .service(scope("/auth").service(login).service(signup))
+            .service(
+                scope("/auth")
+                    .service(login)
+                    .service(signup)
+                    .service(guest)
+                    .service(check_email_exists),
+            )
             .service(
                 scope("/api")
                     .wrap(auth)

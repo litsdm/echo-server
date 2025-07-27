@@ -4,11 +4,23 @@ use argon2::{
         PasswordHash, PasswordHasher as APH, PasswordVerifier, SaltString, rand_core::OsRng,
     },
 };
+use async_trait::async_trait;
+use rand::distributions::{Alphanumeric, DistString};
 use serde::{Deserialize, Serialize};
 use surrealdb::{Surreal, engine::remote::ws::Client, sql::Datetime};
 use surrealitos::{SurrealId, extract_id};
 
-use crate::error::{Error, Result};
+use crate::{
+    error::{Error, Result},
+    model::Controller,
+};
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
+pub enum UserType {
+    User,
+    #[default]
+    Guest,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all(serialize = "camelCase"))]
@@ -16,7 +28,10 @@ pub struct User {
     pub id: SurrealId,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(alias = "type")]
+    pub user_type: UserType,
     pub email: Option<String>,
+    #[serde(skip_serializing)]
     pub password_hash: Option<String>,
     pub avatar_seed: String,
     pub name: Option<String>,
@@ -24,15 +39,18 @@ pub struct User {
     pub blaze_token: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(rename_all(deserialize = "snake_case"))]
 pub struct NewUser {
-    pub email: String,
     pub password: Option<String>, // This is optional because we need to remove it before commiting to DB
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
     #[serde(alias = "avatarSeed", skip_serializing_if = "Option::is_none")]
     pub avatar_seed: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_type: Option<UserType>,
 
     #[serde(skip_deserializing)]
     pub password_hash: Option<String>,
@@ -92,25 +110,19 @@ impl PasswordHasher<'_> {
 
 pub struct UserController;
 
-impl UserController {
-    pub async fn get(client: &Surreal<Client>, id: &str) -> Result<Option<User>> {
-        let user_id = extract_id(id, "user");
-        let user: Option<User> = client.select(("user", user_id)).await?;
-
-        Ok(user)
-    }
-
-    pub async fn get_by_email(client: &Surreal<Client>, email: &str) -> Result<Option<User>> {
+#[async_trait]
+impl Controller<User, NewUser, UserPatch> for UserController {
+    async fn get(client: &Surreal<Client>, id: &SurrealId) -> Result<Option<User>> {
         let mut results = client
-            .query("SELECT * FROM user WHERE email = $email")
-            .bind(("email", email.to_owned()))
+            .query("SELECT * FROM ONLY $user")
+            .bind(("user", id.clone().0))
             .await?;
 
         let user: Option<User> = results.take(0)?;
         Ok(user)
     }
 
-    pub async fn create(client: &Surreal<Client>, new_user: &NewUser) -> Result<User> {
+    async fn create(client: &Surreal<Client>, new_user: &NewUser) -> Result<User> {
         let password_hasher = PasswordHasher::new();
         let mut user_data = new_user.clone();
 
@@ -123,16 +135,13 @@ impl UserController {
         user_data.password_hash = Some(password_hash);
         user_data.created_at = Some(Datetime::default());
         user_data.updated_at = Some(Datetime::default());
+        user_data.user_type = Some(UserType::User);
 
         let user: Option<User> = client.create("user").content(user_data).await?;
         user.ok_or(Error::StoreData("user".to_string()))
     }
 
-    pub async fn update(
-        client: &Surreal<Client>,
-        id: &str,
-        user_patch: &UserPatch,
-    ) -> Result<User> {
+    async fn update(client: &Surreal<Client>, id: &str, user_patch: &UserPatch) -> Result<User> {
         let user_id = extract_id(id, "user");
         let mut user_data = user_patch.clone();
 
@@ -147,15 +156,42 @@ impl UserController {
         Ok(user)
     }
 
-    pub async fn delete(client: &Surreal<Client>, id: &str) -> Result<()> {
-        let user_id = id.to_owned();
-        // we use format! macro instead of .bind because with .bind id is taken as a Thing and it does not match any devices or tokens.
+    async fn delete(client: &Surreal<Client>, id: &SurrealId) -> Result<()> {
         client
-            .query(format!("DELETE device WHERE user_id = '{}'", user_id))
-            .query(format!("DELETE token WHERE user_id = '{}'", user_id))
+            .query("DELETE device WHERE user_id = $user")
+            .query("DELETE token WHERE user_id = $user")
+            .query("DELETE $user")
+            .bind(("user", id.0.clone()))
             .await?;
-        let user_id = extract_id(id, "user");
-        let _user: Option<User> = client.delete(("user", user_id)).await?;
         Ok(())
+    }
+}
+
+impl UserController {
+    pub async fn get_by_email(client: &Surreal<Client>, email: &str) -> Result<Option<User>> {
+        let mut results = client
+            .query("SELECT * FROM user WHERE email = $email")
+            .bind(("email", email.to_owned()))
+            .await?;
+
+        let user: Option<User> = results.take(0)?;
+        Ok(user)
+    }
+
+    pub async fn create_guest(client: &Surreal<Client>) -> Result<User> {
+        // let config = ConfigController::create_default(client).await?;
+        let guest_discriminator = Alphanumeric.sample_string(&mut rand::thread_rng(), 4);
+
+        let new_guest = NewUser {
+            name: Some(format!("Guest#{guest_discriminator}")),
+            user_type: Some(UserType::Guest),
+            avatar_seed: Some(format!("Guest#{guest_discriminator}")),
+            created_at: Some(Datetime::default()),
+            updated_at: Some(Datetime::default()),
+            ..Default::default()
+        };
+
+        let user: Option<User> = client.create("user").content(new_guest).await?;
+        user.ok_or(Error::StoreData("user".to_string()))
     }
 }

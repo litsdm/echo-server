@@ -1,12 +1,16 @@
+use std::str::FromStr;
+
 use actix_web::{
     HttpMessage, HttpRequest, delete, get, put,
     web::{Data, Json},
 };
+use surrealitos::SurrealId;
 
 use crate::{
     connector::backblaze::BackBlaze,
     error::{Error, Result},
     model::{
+        Controller,
         token::Claims,
         user::{User, UserController, UserPatch},
     },
@@ -16,7 +20,8 @@ use crate::{
 #[get("/me")]
 pub async fn get_user(db: Data<SurrealDB>, req: HttpRequest) -> Result<Json<User>> {
     let claims = req.extensions().get::<Claims>().unwrap().clone();
-    let user_option = UserController::get(&db.surreal, &claims.sub).await?;
+    let id = SurrealId::from_str(&claims.sub)?;
+    let user_option = UserController::get(&db.surreal, &id).await?;
 
     if user_option.is_none() {
         return Err(Error::WrongCredentials);
@@ -36,7 +41,8 @@ pub async fn update_user(
     req: HttpRequest,
 ) -> Result<Json<User>> {
     let claims = req.extensions().get::<Claims>().unwrap().clone();
-    let user_option = UserController::get(&db.surreal, &claims.sub).await?;
+    let id = SurrealId::from_str(&claims.sub)?;
+    let user_option = UserController::get(&db.surreal, &id).await?;
 
     if user_option.is_none() {
         return Err(Error::WrongCredentials);
@@ -53,10 +59,11 @@ pub async fn update_user(
 #[delete("")]
 pub async fn delete_user(db: Data<SurrealDB>, req: HttpRequest) -> Result<Json<String>> {
     let claims = req.extensions().get::<Claims>().unwrap().clone();
-    let user_option = UserController::get(&db.surreal, &claims.sub).await?;
+    let id = SurrealId::from_str(&claims.sub)?;
+    let user_option = UserController::get(&db.surreal, &id).await?;
 
     if let Some(user) = user_option {
-        UserController::delete(&db.surreal, &user.id.to_string()).await?;
+        UserController::delete(&db.surreal, &user.id).await?;
         return Ok(Json(String::from("Success!")));
     }
 

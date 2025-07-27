@@ -40,6 +40,9 @@ pub enum Error {
 
     #[error(transparent)]
     Reqwest(#[from] reqwest::Error),
+
+    #[error(transparent)]
+    ParseSurrealId(#[from] surrealitos::SurrealIdParseError),
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -63,6 +66,7 @@ impl actix_web::error::ResponseError for Error {
             Error::BadRequest(_) => StatusCode::BAD_REQUEST,
             Error::PasswordHash(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Error::Reqwest(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::ParseSurrealId(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

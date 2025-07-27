@@ -1,14 +1,18 @@
+use std::str::FromStr;
+
 use actix_web::{
-    post,
+    HttpMessage, HttpRequest, post,
     web::{Data, Json},
 };
 use serde::{Deserialize, Serialize};
+use surrealitos::SurrealId;
 
 use crate::{
     connector::{backblaze::BackBlaze, mistral::Mistral},
     error::Result,
     model::{
         Controller,
+        token::Claims,
         transcription::{NewTranscription, Status, Transcription, TranscriptionController},
     },
     repo::surreal::SurrealDB,
@@ -23,7 +27,11 @@ pub struct FilePayload {
 pub async fn transcribe_raw_only(
     db: Data<SurrealDB>,
     body: Json<FilePayload>,
+    req: HttpRequest,
 ) -> Result<Json<Transcription>> {
+    let claims = req.extensions().get::<Claims>().unwrap().clone();
+    let user_id = SurrealId::from_str(&claims.sub)?;
+
     let payload = body.into_inner();
     let mut file_url = payload.file;
 
@@ -49,6 +57,7 @@ pub async fn transcribe_raw_only(
         status: Some(Status::Done),
         raw: Some(raw_transcription.text),
         audio_file: Some(sanitized_url),
+        user: Some(user_id),
         ..Default::default()
     };
 

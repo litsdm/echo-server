@@ -1,28 +1,35 @@
+use std::str::FromStr;
+
 use actix_web::{
-    post,
-    web::{Data, Json},
+    get, post,
+    web::{Data, Json, Path},
 };
 use serde::{Deserialize, Serialize};
+use surrealitos::SurrealId;
 
 use crate::{
     error::{Error, Result},
     model::{
-        device::{DeviceController, NewDevice},
+        Controller,
+        device::{DeviceController, DevicePatch, NewDevice},
         token::{TokenController, TokenManager, TokenResponse},
         user::{NewUser, PasswordHasher, UserController},
     },
     repo::surreal::SurrealDB,
 };
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all(deserialize = "snake_case"))]
+#[derive(Serialize, Deserialize)]
 struct UserPayload {
     pub user: NewUser,
     pub device: NewDevice,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GuestPayload {
+    pub device: NewDevice,
+}
+
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all(deserialize = "snake_case"))]
 pub struct LoginPayload {
     pub email: String,
     pub password: String,
@@ -30,7 +37,6 @@ pub struct LoginPayload {
 }
 
 #[derive(Serialize, Deserialize)]
-#[serde(rename_all(deserialize = "snake_case"))]
 pub struct RefreshPayload {
     #[serde(alias = "refreshToken")]
     refresh_token: String,
@@ -38,10 +44,23 @@ pub struct RefreshPayload {
     device_id: String,
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct CheckEmailResponse {
+    exists: bool,
+}
+
+fn get_new_user_email(new_user: &NewUser) -> Result<String> {
+    if new_user.email.is_none() {
+        return Err(Error::BadRequest("Email is required".to_string()));
+    }
+
+    Ok(new_user.clone().email.unwrap().to_lowercase())
+}
+
 #[post("/signup")]
 pub async fn signup(db: Data<SurrealDB>, body: Json<UserPayload>) -> Result<Json<TokenResponse>> {
     let payload = body.into_inner();
-    let email = payload.user.email.to_lowercase();
+    let email = get_new_user_email(&payload.user)?;
     let existing_user = UserController::get_by_email(&db.surreal, &email).await?;
 
     if existing_user.is_some() {
@@ -96,10 +115,45 @@ pub async fn refresh(
     body: Json<RefreshPayload>,
 ) -> Result<Json<TokenResponse>> {
     let claims = TokenManager::validate_refresh_token(&db.surreal, &body.refresh_token).await?;
-    let user = UserController::get(&db.surreal, &claims.sub)
-        .await?
-        .unwrap();
+    let id = SurrealId::from_str(&claims.sub)?;
+    let user = UserController::get(&db.surreal, &id).await?.unwrap();
 
     let token = TokenController::create_or_update(&db.surreal, &user, &body.device_id).await?;
     Ok(Json(token))
+}
+
+#[post("/guest")]
+pub async fn guest(db: Data<SurrealDB>, body: Json<GuestPayload>) -> Result<Json<TokenResponse>> {
+    let payload = body.into_inner();
+    let device = DeviceController::create_or_update(&db.surreal, &payload.device).await?;
+
+    let guest = match device.get_guest(&db.surreal).await? {
+        Some(g) => g,
+        None => UserController::create_guest(&db.surreal).await?,
+    };
+
+    let guest_id = guest.clone().id;
+    let device_patch = DevicePatch {
+        user_id: Some(guest_id.to_string()),
+        guest_id: Some(guest_id.to_string()),
+        ..Default::default()
+    };
+
+    DeviceController::update(&db.surreal, &device.id.to_string(), &device_patch).await?;
+
+    let token =
+        TokenController::create_or_update(&db.surreal, &guest, &device.id.to_string()).await?;
+    Ok(Json(token))
+}
+
+#[get("/email-exists/{email}")]
+pub async fn check_email_exists(
+    db: Data<SurrealDB>,
+    path: Path<String>,
+) -> Result<Json<CheckEmailResponse>> {
+    let email = path.into_inner().to_lowercase();
+    let existing_user = UserController::get_by_email(&db.surreal, &email).await?;
+    Ok(Json(CheckEmailResponse {
+        exists: existing_user.is_some(),
+    }))
 }
