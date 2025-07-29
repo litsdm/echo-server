@@ -44,11 +44,15 @@ impl Mistral {
         }
     }
 
-    pub async fn transcribe(&self, file_url: &str) -> Result<TranscriptionResponse> {
+    pub async fn transcribe(&self, file_url: &str, segment: bool) -> Result<TranscriptionResponse> {
         let url = format!("{}/audio/transcriptions", self.base_url);
-        let form = vec![("file_url", file_url), ("model", "voxtral-mini-2507")];
+        let mut form = vec![("file_url", file_url), ("model", "voxtral-mini-2507")];
 
         let mistral_key = env::var("MISTRAL_API_KEY").unwrap();
+
+        if segment {
+            form.push(("timestamp_granularities", "segment"));
+        }
 
         let response = self
             .client

@@ -45,7 +45,7 @@ pub async fn transcribe_raw_only(
     }
 
     let mistral = Mistral::new();
-    let raw_transcription = mistral.transcribe(&file_url).await?;
+    let raw_transcription = mistral.transcribe(&file_url, false).await?;
 
     let sanitized_url = if let Some(question_mark_pos) = file_url.find('?') {
         file_url[..question_mark_pos].to_string()
