@@ -4,7 +4,18 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use surrealitos::SurrealId;
 
-use crate::{connector::HttpMethod, error::Result};
+use crate::{
+    connector::{HttpMethod, mistral::Segment},
+    error::Result,
+};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct DiarizationInput {
+    pub audio: String,
+    pub segments: Vec<Segment>,
+    pub language: String,
+    pub webhook_url: String,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub enum Gpu {

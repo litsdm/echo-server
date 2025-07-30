@@ -34,6 +34,7 @@ pub struct Transcription {
     pub status: Status,
     pub user: Relation<User>,
     pub raw: Option<String>,
+    pub language: Option<String>,
     pub diarized: Option<Vec<Segment>>,
     pub note: Option<String>, // Summarized note
     pub llm: Option<String>,
@@ -50,6 +51,8 @@ pub struct NewTranscription {
     pub audio_file: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub raw: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub diarized: Option<Vec<Segment>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -79,6 +82,8 @@ pub struct TranscriptionPatch {
     pub diarized: Option<Vec<Segment>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 
     #[serde(skip_deserializing)]
     pub updated_at: Option<Datetime>,

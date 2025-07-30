@@ -25,7 +25,7 @@ use repo::surreal::SurrealDB;
 use crate::api::{
     auth::{check_email_exists, guest, refresh},
     storage::{presign_get, presign_put},
-    transcription::transcribe_raw_only,
+    transcription::{transcribe, transcribe_raw_only},
 };
 
 async fn validator(
@@ -94,7 +94,11 @@ async fn main() -> std::io::Result<()> {
                             .service(delete_user),
                     )
                     .service(scope("/storage").service(presign_put).service(presign_get))
-                    .service(scope("/transcription").service(transcribe_raw_only)),
+                    .service(
+                        scope("/transcription")
+                            .service(transcribe_raw_only)
+                            .service(transcribe),
+                    ),
             )
     })
     .bind(("0.0.0.0", 8080))?

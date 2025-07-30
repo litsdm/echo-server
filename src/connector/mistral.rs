@@ -2,10 +2,11 @@ use std::env;
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::error::Result;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Segment {
     pub text: String,
     pub start: f64,
@@ -23,7 +24,7 @@ pub struct Usage {
 #[derive(Deserialize, Serialize)]
 pub struct TranscriptionResponse {
     pub text: String,
-    pub language: String,
+    pub language: Option<String>,
     pub model: String,
     pub segments: Option<Vec<Segment>>,
     pub usage: Option<Usage>,
@@ -61,9 +62,13 @@ impl Mistral {
             .form(&form)
             .send()
             .await?
-            .json::<TranscriptionResponse>()
+            .json::<Value>()
             .await?;
 
-        Ok(response)
+        println!("{:?}", response);
+
+        let transcription = serde_json::from_value(response)?;
+
+        Ok(transcription)
     }
 }
