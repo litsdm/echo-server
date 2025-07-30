@@ -13,7 +13,6 @@ use crate::{
 pub struct DiarizationInput {
     pub audio: String,
     pub segments: Vec<Segment>,
-    pub language: String,
     pub webhook_url: String,
 }
 

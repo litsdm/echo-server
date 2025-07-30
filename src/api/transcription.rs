@@ -4,10 +4,8 @@ use actix_web::{
     HttpMessage, HttpRequest, post,
     web::{Data, Json},
 };
-use isolang::Language;
 use serde::{Deserialize, Serialize};
 use surrealitos::SurrealId;
-use whatlang::{Lang, detect_lang};
 
 use crate::{
     connector::{
@@ -106,23 +104,12 @@ pub async fn transcribe(
         file_url.clone()
     };
 
-    let language = match raw_transcription.language {
-        Some(lang) => Some(lang),
-        None => {
-            let lang = detect_lang(&raw_transcription.text).unwrap_or(Lang::Eng);
-            Language::from_639_3(lang.code())
-                .unwrap()
-                .to_639_1()
-                .map(|s| s.to_string())
-        }
-    };
-
     let new_transcription = NewTranscription {
         status: Some(Status::Done),
         raw: Some(raw_transcription.text),
         audio_file: Some(sanitized_url),
         user: Some(user_id),
-        language: language.clone(),
+        language: raw_transcription.language,
         ..Default::default()
     };
 
@@ -131,17 +118,15 @@ pub async fn transcribe(
     let diarize_input = DiarizationInput {
         audio: file_url,
         segments: raw_transcription.segments.unwrap_or(vec![]),
-        language: language.unwrap_or("en".to_string()),
         webhook_url: "".to_string(),
     };
 
-    println!("{:?}", diarize_input);
-
-    let output = modal
+    // TODO: handle calls
+    // TODO: manage webhooks properly
+    // TODO: maybe call this async?
+    let _output = modal
         .run::<DiarizationInput, ToolAsyncIO>(HttpMethod::Post, "diarize/initiate", &diarize_input)
         .await?;
-
-    println!("{:?}", output);
 
     Ok(Json(transcription))
 }
