@@ -8,12 +8,12 @@ use crate::{
     model::{Controller, LLMProvider, user::User},
 };
 
-// TODO: add diarization params based on whisperx response
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Segment {
     pub text: String,
     pub start: f64,
     pub end: f64,
+    pub speaker: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -71,7 +71,7 @@ pub struct NewTranscription {
     pub updated_at: Option<Datetime>,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub struct TranscriptionPatch {
     #[serde(skip_serializing_if = "Option::is_none")]

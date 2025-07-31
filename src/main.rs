@@ -25,7 +25,7 @@ use repo::surreal::SurrealDB;
 use crate::api::{
     auth::{check_email_exists, guest, refresh},
     storage::{presign_get, presign_put},
-    transcription::{transcribe, transcribe_raw_only},
+    transcription::{diarize_webhook, transcribe, transcribe_raw_only},
 };
 
 async fn validator(
@@ -100,6 +100,7 @@ async fn main() -> std::io::Result<()> {
                             .service(transcribe),
                     ),
             )
+            .service(scope("webhook").service(diarize_webhook))
     })
     .bind(("0.0.0.0", 8080))?
     .run()

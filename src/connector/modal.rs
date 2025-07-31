@@ -4,36 +4,20 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use surrealitos::SurrealId;
 
-use crate::{
-    connector::{HttpMethod, mistral::Segment},
-    error::Result,
-};
+use crate::{connector::HttpMethod, error::Result, model::transcription::Segment};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct BaseParameters {
+    pub webhook_url: String,
+    pub job_id: String,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DiarizationInput {
     pub audio: String,
     pub segments: Vec<Segment>,
-    pub webhook_url: String,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub enum Gpu {
-    #[default]
-    T4,
-    L4,
-    A10G,
-    A100,
-    A100_80,
-    H100,
-    H200,
-    B200,
-    Cpu,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ContainerTime {
-    pub gpu: Gpu,
-    pub time: f64,
+    #[serde(flatten)]
+    pub base: BaseParameters,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -68,20 +52,6 @@ pub struct ToolAsyncIO {
 pub struct ModalAI {
     client: Client,
     pub base_url: String,
-}
-
-fn cost_per_second_by_gpu(gpu: Gpu) -> f64 {
-    match gpu {
-        Gpu::B200 => 0.001736,
-        Gpu::H200 => 0.001261,
-        Gpu::H100 => 0.001097,
-        Gpu::A100_80 => 0.000694,
-        Gpu::A100 => 0.000583,
-        Gpu::A10G => 0.000306,
-        Gpu::L4 => 0.000222,
-        Gpu::T4 => 0.000164,
-        Gpu::Cpu => 0.0000131,
-    }
 }
 
 impl ModalAI {

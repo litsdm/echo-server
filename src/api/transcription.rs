@@ -5,20 +5,29 @@ use actix_web::{
     web::{Data, Json},
 };
 use serde::{Deserialize, Serialize};
+use surrealdb::{Surreal, engine::remote::ws::Client};
 use surrealitos::SurrealId;
 
 use crate::{
+    api::make_default_webhook_url,
     connector::{
         HttpMethod,
         backblaze::BackBlaze,
-        mistral::Mistral,
-        modal::{DiarizationInput, ModalAI, ToolAsyncIO},
+        mistral::{Mistral, TranscriptionResponse},
+        modal::{
+            BaseParameters, DiarizationInput, ModalAI, ResultOutput, Status as ModalStatus,
+            ToolAsyncIO,
+        },
+        reverb::Reverb,
     },
     error::Result,
     model::{
         Controller,
         token::Claims,
-        transcription::{NewTranscription, Status, Transcription, TranscriptionController},
+        transcription::{
+            NewTranscription, Segment, Status, Transcription, TranscriptionController,
+            TranscriptionPatch,
+        },
     },
     repo::surreal::SurrealDB,
 };
@@ -26,6 +35,11 @@ use crate::{
 #[derive(Deserialize, Serialize)]
 pub struct FilePayload {
     file: String,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct DiarizeOutput {
+    pub segments: Vec<Segment>,
 }
 
 #[post("/raw")]
@@ -71,8 +85,69 @@ pub async fn transcribe_raw_only(
     Ok(Json(transcription))
 }
 
-// TODO: organize this function and make it respond faster with more async functionality once we have websockets
-// So basically create and respond with an empty transcription that will be populated once we transcribe and then diarize
+async fn diarize_async(diarize_input: &DiarizationInput) -> Result<ToolAsyncIO> {
+    // TODO: handle calls
+    // TODO: manage webhooks properly
+    let modal = ModalAI::new();
+
+    let output = modal
+        .run::<DiarizationInput, ToolAsyncIO>(HttpMethod::Post, "diarize/initiate", diarize_input)
+        .await?;
+
+    Ok(output)
+}
+
+async fn transcribe_async(
+    client: &Surreal<Client>,
+    transcription_id: &SurrealId,
+    file_url: &str,
+    diarize: bool,
+) -> Result<TranscriptionResponse> {
+    let mistral = Mistral::new();
+    let reverb = Reverb::new();
+    let raw_transcription = mistral.transcribe(file_url, true).await?;
+    println!(
+        "raw_transcription: {}",
+        serde_json::to_string_pretty(&raw_transcription)?
+    );
+
+    let new_status = if diarize {
+        Status::Diarizing
+    } else {
+        Status::Done
+    };
+
+    let patch = TranscriptionPatch {
+        raw: Some(raw_transcription.text.to_string()),
+        language: raw_transcription.language.clone(),
+        status: Some(new_status),
+        ..Default::default()
+    };
+
+    let transcription =
+        TranscriptionController::update(client, &transcription_id.to_string(), &patch).await?;
+
+    let _ = reverb
+        .notify_update("transcription/updated", transcription)
+        .await;
+
+    if diarize {
+        let segments = raw_transcription.segments.clone();
+        let diarize_input = DiarizationInput {
+            audio: file_url.to_string(),
+            segments: segments.unwrap_or(vec![]),
+            base: BaseParameters {
+                webhook_url: make_default_webhook_url("diarize"),
+                job_id: transcription_id.to_string(),
+            },
+        };
+
+        tokio::spawn(async move { diarize_async(&diarize_input).await });
+    }
+
+    Ok(raw_transcription)
+}
+
 #[post("/transcribe")]
 pub async fn transcribe(
     db: Data<SurrealDB>,
@@ -94,9 +169,7 @@ pub async fn transcribe(
         );
     }
 
-    let mistral = Mistral::new();
-    let modal = ModalAI::new();
-    let raw_transcription = mistral.transcribe(&file_url, true).await?;
+    let reverb = Reverb::new();
 
     let sanitized_url = if let Some(question_mark_pos) = file_url.find('?') {
         file_url[..question_mark_pos].to_string()
@@ -105,28 +178,50 @@ pub async fn transcribe(
     };
 
     let new_transcription = NewTranscription {
-        status: Some(Status::Done),
-        raw: Some(raw_transcription.text),
+        status: Some(Status::Transcribing),
         audio_file: Some(sanitized_url),
         user: Some(user_id),
-        language: raw_transcription.language,
         ..Default::default()
     };
 
     let transcription = TranscriptionController::create(&db.surreal, &new_transcription).await?;
 
-    let diarize_input = DiarizationInput {
-        audio: file_url,
-        segments: raw_transcription.segments.unwrap_or(vec![]),
-        webhook_url: "".to_string(),
-    };
+    let id = transcription.id.clone();
+    // fire and forget to continue in bg without blocking the API response for user
+    tokio::spawn(async move { transcribe_async(&db.surreal, &id, &file_url, true).await });
 
-    // TODO: handle calls
-    // TODO: manage webhooks properly
-    // TODO: maybe call this async?
-    let _output = modal
-        .run::<DiarizationInput, ToolAsyncIO>(HttpMethod::Post, "diarize/initiate", &diarize_input)
-        .await?;
+    let _ = reverb
+        .notify_update("transcription/created", transcription.clone())
+        .await;
 
     Ok(Json(transcription))
+}
+
+#[post("/diarize/status")]
+pub async fn diarize_webhook(
+    db: Data<SurrealDB>,
+    body: Json<ResultOutput<DiarizeOutput>>,
+) -> Result<Json<String>> {
+    let reverb = Reverb::new();
+    let result = body.into_inner();
+    if result.status == ModalStatus::Success {
+        let id = result.id.clone().unwrap();
+        if let Some(data) = result.data {
+            // TODO: spawn summarization here
+
+            let patch = TranscriptionPatch {
+                status: Some(Status::Summarizing),
+                diarized: Some(data.segments),
+                ..Default::default()
+            };
+
+            let transcription =
+                TranscriptionController::update(&db.surreal, &id.to_string(), &patch).await?;
+            let _ = reverb
+                .notify_update("transcription/updated", transcription)
+                .await;
+        }
+    }
+
+    Ok(Json("Success".to_string()))
 }

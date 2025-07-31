@@ -4,14 +4,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::error::Result;
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Segment {
-    pub text: String,
-    pub start: f64,
-    pub end: f64,
-}
+use crate::{error::Result, model::transcription::Segment};
 
 #[derive(Deserialize, Serialize)]
 pub struct Usage {
@@ -62,13 +55,9 @@ impl Mistral {
             .form(&form)
             .send()
             .await?
-            .json::<Value>()
+            .json::<TranscriptionResponse>()
             .await?;
 
-        println!("{:?}", response);
-
-        let transcription = serde_json::from_value(response)?;
-
-        Ok(transcription)
+        Ok(response)
     }
 }

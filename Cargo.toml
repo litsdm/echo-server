@@ -25,3 +25,4 @@ serde = { version = "^1", features = ["derive"] }
 surrealdb = { version = "2.3.7", features = ["protocol-ws", "native-tls"] }
 surrealitos = { git = "https://github.com/litsdm/surrealitos.git" }
 thiserror = "2.0.12"
+tokio = "1.47.0"
