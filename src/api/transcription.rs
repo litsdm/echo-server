@@ -2,7 +2,7 @@ use std::str::FromStr;
 
 use actix_web::{
     HttpMessage, HttpRequest, get, post,
-    web::{Data, Json, Query},
+    web::{Data, Json, Path, Query},
 };
 use serde::{Deserialize, Serialize};
 use surrealdb::{Surreal, engine::remote::ws::Client};
@@ -63,6 +63,18 @@ pub async fn get_user_transcriptions(
         .await?;
 
     Ok(Json(transcriptions))
+}
+
+#[get("/{id}")]
+pub async fn get_transcription(
+    db: Data<SurrealDB>,
+    path: Path<String>,
+) -> Result<Json<Transcription>> {
+    let id: SurrealId = path.into_inner().parse()?;
+    let transcription_opt = TranscriptionController::get(&db.surreal, &id).await?;
+    let transcription = transcription_opt.ok_or(Error::NotFound("transcription".to_string()))?;
+
+    Ok(Json(transcription))
 }
 
 #[post("/raw")]
