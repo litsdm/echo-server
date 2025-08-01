@@ -2,7 +2,6 @@ use std::env;
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use crate::{error::Result, model::transcription::Segment};
 

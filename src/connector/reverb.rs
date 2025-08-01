@@ -20,7 +20,7 @@ impl Reverb {
     pub fn new() -> Self {
         let project_env = env::var("PROJECT_ENV").unwrap_or(String::from("development"));
         let base_url = match project_env.as_str() {
-            "prod" => "https://reverb.fly.dev",
+            "prod" => "https://echo-reverb.fly.dev",
             _ => "http://localhost:4000",
         };
         Reverb {

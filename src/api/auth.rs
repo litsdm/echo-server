@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use actix_web::{
-    get, post,
+    HttpMessage, HttpRequest, get, post,
     web::{Data, Json, Path},
 };
 use serde::{Deserialize, Serialize};
@@ -12,7 +12,7 @@ use crate::{
     model::{
         Controller,
         device::{DeviceController, DevicePatch, NewDevice},
-        token::{TokenController, TokenManager, TokenResponse},
+        token::{Claims, TokenController, TokenManager, TokenResponse},
         user::{NewUser, PasswordHasher, UserController},
     },
     repo::surreal::SurrealDB,
@@ -156,4 +156,10 @@ pub async fn check_email_exists(
     Ok(Json(CheckEmailResponse {
         exists: existing_user.is_some(),
     }))
+}
+
+#[post("/validate")]
+pub async fn validate_token(req: HttpRequest) -> Result<Json<Claims>> {
+    let claims = req.extensions().get::<Claims>().unwrap().clone();
+    Ok(Json(claims))
 }
