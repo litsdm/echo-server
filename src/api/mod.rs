@@ -1,5 +1,7 @@
 use std::env;
 
+use serde::{Deserialize, Serialize};
+
 pub mod auth;
 pub mod device;
 pub mod storage;
@@ -21,4 +23,28 @@ pub fn make_default_webhook_url(tool_type: &str) -> String {
     let base_url = get_default_webhook_base();
 
     format!("{base_url}/{tool_type}/status")
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PaginationParameters<T = ()> {
+    #[serde(default)]
+    pub offset: usize,
+    #[serde(default = "default_limit")]
+    pub limit: usize,
+    #[serde(flatten)]
+    pub filters: Option<T>,
+}
+
+fn default_limit() -> usize {
+    50
+}
+
+impl<T> Default for PaginationParameters<T> {
+    fn default() -> Self {
+        Self {
+            offset: 0,
+            limit: 50,
+            filters: None,
+        }
+    }
 }

@@ -11,8 +11,9 @@ use surrealdb::{Surreal, engine::remote::ws::Client, sql::Datetime};
 use surrealitos::{SurrealId, extract_id};
 
 use crate::{
+    api::PaginationParameters,
     error::{Error, Result},
-    model::Controller,
+    model::{Controller, transcription::Transcription},
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
@@ -105,6 +106,24 @@ impl PasswordHasher<'_> {
         } else {
             Err(Error::WrongCredentials)
         }
+    }
+}
+
+impl User {
+    pub async fn get_transcriptions(
+        &self,
+        client: &Surreal<Client>,
+        pagination: &PaginationParameters,
+    ) -> Result<Vec<Transcription>> {
+        let mut results = client
+            .query("SELECT id, status, created_at, updated_at, user, language FROM transcription WHERE user = $user ORDER BY created_at LIMIT $limit START $offset")
+            .bind(("user", self.id.clone().0))
+            .bind(("limit", pagination.limit))
+            .bind(("offset", pagination.offset))
+            .await?;
+
+        let transcriptions: Vec<Transcription> = results.take(0)?;
+        Ok(transcriptions)
     }
 }
 

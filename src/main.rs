@@ -25,7 +25,7 @@ use repo::surreal::SurrealDB;
 use crate::api::{
     auth::{check_email_exists, guest, refresh, validate_token},
     storage::{presign_get, presign_put},
-    transcription::{diarize_webhook, transcribe, transcribe_raw_only},
+    transcription::{diarize_webhook, get_user_transcriptions, transcribe, transcribe_raw_only},
 };
 
 async fn validator(
@@ -97,6 +97,7 @@ async fn main() -> std::io::Result<()> {
                     .service(scope("/storage").service(presign_put).service(presign_get))
                     .service(
                         scope("/transcription")
+                            .service(get_user_transcriptions)
                             .service(transcribe_raw_only)
                             .service(transcribe),
                     ),

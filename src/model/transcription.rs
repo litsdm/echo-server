@@ -33,12 +33,26 @@ pub struct Transcription {
     pub updated_at: String,
     pub status: Status,
     pub user: Relation<User>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub raw: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub diarized: Option<Vec<Segment>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>, // Summarized note
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub llm: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub llm_provider: Option<LLMProvider>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_file: Option<String>, // B2 url
 }
 

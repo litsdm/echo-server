@@ -1,15 +1,15 @@
 use std::str::FromStr;
 
 use actix_web::{
-    HttpMessage, HttpRequest, post,
-    web::{Data, Json},
+    HttpMessage, HttpRequest, get, post,
+    web::{Data, Json, Query},
 };
 use serde::{Deserialize, Serialize};
 use surrealdb::{Surreal, engine::remote::ws::Client};
 use surrealitos::SurrealId;
 
 use crate::{
-    api::make_default_webhook_url,
+    api::{PaginationParameters, make_default_webhook_url},
     connector::{
         HttpMethod,
         backblaze::BackBlaze,
@@ -20,7 +20,7 @@ use crate::{
         },
         reverb::Reverb,
     },
-    error::Result,
+    error::{Error, Result},
     model::{
         Controller,
         token::Claims,
@@ -28,6 +28,7 @@ use crate::{
             NewTranscription, Segment, Status, Transcription, TranscriptionController,
             TranscriptionPatch,
         },
+        user::UserController,
     },
     repo::surreal::SurrealDB,
 };
@@ -40,6 +41,28 @@ pub struct FilePayload {
 #[derive(Deserialize, Serialize)]
 pub struct DiarizeOutput {
     pub segments: Vec<Segment>,
+}
+
+#[get("/all")]
+pub async fn get_user_transcriptions(
+    db: Data<SurrealDB>,
+    query: Query<PaginationParameters>,
+    req: HttpRequest,
+) -> Result<Json<Vec<Transcription>>> {
+    let claims = req.extensions().get::<Claims>().unwrap().clone();
+    let user_id = SurrealId::from_str(&claims.sub)?;
+    let user_option = UserController::get(&db.surreal, &user_id).await?;
+
+    if user_option.is_none() {
+        return Err(Error::WrongCredentials);
+    }
+
+    let transcriptions = user_option
+        .unwrap()
+        .get_transcriptions(&db.surreal, &query.into_inner())
+        .await?;
+
+    Ok(Json(transcriptions))
 }
 
 #[post("/raw")]
@@ -87,7 +110,6 @@ pub async fn transcribe_raw_only(
 
 async fn diarize_async(diarize_input: &DiarizationInput) -> Result<ToolAsyncIO> {
     // TODO: handle calls
-    // TODO: manage webhooks properly
     let modal = ModalAI::new();
 
     let output = modal
